@@ -26,8 +26,20 @@ def counts_to_top(words_array, counts_array, n):
 def accuracy(words_real, counts_real, words_predicted, counts_predicted):
     '''Some metric to estimate the quality of prediction (should be 1 when same argument given for real and predicted
     and 0 if there is no words coincide'''
-    #return score
-    pass
+    hit_rate = len(set(words_real) & set(words_predicted)) / len(set(words_real) | set(words_predicted))
+
+    score = 0
+    for i, word in enumerate(words_real):
+        if word in words_predicted:
+            cp = counts_predicted[[e for e in range(len(words_predicted)) if words_predicted[e] == word][0]]
+            cr = counts_real[i]
+            score += abs(cp - cr)
+        else:
+            score += counts_real[i]
+    score /= sum(counts_real)
+    score = 1 - score
+
+    return hit_rate, score
 
 def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_result = 'result/',result_suff = '_0'):
     array = txt_to_array(filename)
