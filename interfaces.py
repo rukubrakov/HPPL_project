@@ -39,8 +39,16 @@ def array_to_counts(array, n_use, n_keep):
 def counts_to_top(words_array, counts_array, n):
     '''Given a lists of words and counts (outputs of array_to_counts for several processes) returns the final top n in the format of 2 arrays,
     one with strs and another one with ints, ints should be sorted in descending order'''
-    pass
+    # words_array is a list of m lists, len of each <= n, where m - number of processes
     # return words, counts
+    flat_words = [item for sublist in words_array for item in sublist]
+    flat_counts = [item for sublist in counts_array for item in sublist]
+    dic = dict(zip(set(flat_words), np.zeros(len(set(flat_words)), dtype = int)))
+    for i, word in enumerate(flat_words):
+        dic[word] += flat_counts[i]
+    dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse = True))
+    (keys,values) = zip(*dic.items())    
+    return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
 
 def accuracy(words_real, counts_real, words_predicted, counts_predicted):
     '''Some metric to estimate the quality of prediction (should be 1 when same argument given for real and predicted
