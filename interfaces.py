@@ -1,14 +1,33 @@
 import numpy as np
 
-def txt_to_array(filename):
-    '''Given filename, for example 'data/file.txt', returns an array of str with all rows in file'''
-    pass
-    #return array
-
 def file_to_n_files(filename,n):
     '''Reads .txt file, splits it into n equal parts, saves to the same filepath, but with additional symbols in name, returns nothing.
     For example: file_to_n_files('file.txt',2) will splitt file into 2 with names file_1.txt and file_2.txt'''
-    pass
+    
+    #for Linux gsplit -> split
+    get_ipython().system('gsplit -d -l $(($(wc -l < "$filename")/$n)) --additional-suffix=.txt $filename $"$(cut -d\'.\' -f1 <<< $filename)_"')
+    number_of_words_in_the_last_output = get_ipython().getoutput('(wc -w < $(ls $"$(cut -d\'.\' -f1 <<< $filename)_"* | sort | tail -n 1))')
+    if int(number_of_words_in_the_last_output[0]) == 0:
+        get_ipython().system('rm $(ls $"$(cut -d\'.\' -f1 <<< $filename)_"* | sort | tail -n 1)    ')
+
+
+
+def txt_to_array(filename):
+    '''Given filename, for example 'data/file.txt', returns an array of str with all rows in file'''
+    
+    x = []
+    with open(file_name, "r") as f:
+        temp_list = []
+        for line in f:
+            if line.strip(): #line is not blank
+                temp_list.append(line[:-2])
+            else: #line is blank, i.e., it contains only newlines and/or whitespace
+                if temp_list: #check if temp_list contains any items
+                    x.append(temp_list)
+                temp_list = []
+    return x
+
+
 
 def array_to_counts(array, n_use, n_keep):
     '''Given the array of str (output of function txt_to_array) first  it counts all the words but in the process it keeps only top n_uses words.
