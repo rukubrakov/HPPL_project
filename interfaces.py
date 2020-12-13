@@ -57,12 +57,12 @@ def preprocess(document, lemmatization=False, rm_stop_words=False):
 
     # Removing stopwords
     if rm_stop_words:
-        nltk.download('stopwords')
+        #nltk.download('stopwords')
         stop_words = set(stopwords.words('english'))
         words = [w for w in words if w not in stop_words]
     # Lemmatizing
     if lemmatization:
-        nltk.download('wordnet')
+        #nltk.download('wordnet')
         wordnet_lemmatizer = WordNetLemmatizer()
         for pos in [wordnet.NOUN, wordnet.VERB, wordnet.ADJ, wordnet.ADV]:
             words = [wordnet_lemmatizer.lemmatize(x, pos) for x in words]
@@ -77,12 +77,13 @@ def array_to_counts(array, n_use, n_keep):
     tmp_voc = {}
     tmp_array = array.copy()
     # preprocess strings, have the array of sorted dicts of token frequencies
-    tmp_array = [dict(sorted(dict(Counter(preprocess(tmp))).items(), key=lambda item: item[1], reverse=True)) for tmp in tmp_array]
+    tmp_array = [dict(sorted(dict(Counter(preprocess(tmp, lemmatization=True, rm_stop_words=True))).items(), key=lambda item: item[1], reverse=True)) for tmp in tmp_array]
     # count how many most frequent word we should take from each str to dill the array of size `n_use`
     words_from_str = n_use // len(tmp_array) + 1 if n_use > len(tmp_array) else n_use
     second_run = 0
     for k, tokens in enumerate(tmp_array):
         i = 0
+        keys_to_pop = []
         keys = list(tokens.keys())
         values = list(tokens.values())
         if len(tmp_voc) < n_use + 1:
@@ -91,11 +92,13 @@ def array_to_counts(array, n_use, n_keep):
             while i < m:
                 try:
                     tmp_voc[keys[i]] += values[i]
+                    keys_to_pop.append(i)
                     i += 1
                     m = min(len(tokens), m + 1)
                 except KeyError:
                     if len(tmp_voc) < n_use + 1:
                         tmp_voc[keys[i]] = values[i]
+                        keys_to_pop.append(i)
                         i += 1
                     else:
                         break
@@ -107,6 +110,8 @@ def array_to_counts(array, n_use, n_keep):
                     tmp_voc[key] += value
                 except KeyError:
                     continue
+        for idx in keys_to_pop:
+            tmp_array[k].pop(keys[idx])
     # also, we need to count words we could miss in the first run
     for k in range(second_run):
         keys = list(tmp_array[k].keys())
@@ -155,4 +160,5 @@ def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_res
         words, counts = counts_to_top(words_array,counts_array,n_final_top)
         np.array(words).dump(folder_to_save_result + 'words' + result_suff + '.txt')
         np.array(counts).dump(folder_to_save_result + 'counts' + result_suff + '.txt')
+
 
