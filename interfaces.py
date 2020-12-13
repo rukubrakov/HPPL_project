@@ -11,27 +11,37 @@ def file_to_n_files(filename,n):
     For example: file_to_n_files('file.txt',2) will splitt file into 2 with names file_1.txt and file_2.txt'''
     
     #for Linux gsplit -> split
-    get_ipython().system('gsplit -d -l $(($(wc -l < "$filename")/$n)) --additional-suffix=.txt $filename $"$(cut -d\'.\' -f1 <<< $filename)_"')
+    get_ipython().system('split -d -l $(($(wc -l < "$filename")/$n)) --additional-suffix=.txt $filename $"$(cut -d\'.\' -f1 <<< $filename)_"')
     number_of_words_in_the_last_output = get_ipython().getoutput('(wc -w < $(ls $"$(cut -d\'.\' -f1 <<< $filename)_"* | sort | tail -n 1))')
     if int(number_of_words_in_the_last_output[0]) == 0:
         get_ipython().system('rm $(ls $"$(cut -d\'.\' -f1 <<< $filename)_"* | sort | tail -n 1)    ')
 
+def put_str_together(array, n = 200):
+    if len(array) < n * 2:
+        return array
+    else:
+        tmp = []
+        for i in range(len(array)//2):
+            tmp.append(array[2*i]+' '+array[2*i+1])
+        if len(array)%2 != 0:
+            tmp.append(array[-1])
+        return put_str_together(tmp, n)
 
-
+    
 def txt_to_array(filename):
     '''Given filename, for example 'data/file.txt', returns an array of str with all rows in file'''
     
     x = []
-    with open(file_name, "r") as f:
+    with open(filename, "r") as f:
         temp_list = []
         for line in f:
             if line.strip(): #line is not blank
-                temp_list.append(line[:-2])
+                temp_list.append(line.replace('\n',''))
             else: #line is blank, i.e., it contains only newlines and/or whitespace
                 if temp_list: #check if temp_list contains any items
-                    x.append(temp_list)
+                    x += temp_list
                 temp_list = []
-    return x
+    return put_str_together(x)
 
 
 def preprocess(document, lemmatization=False, rm_stop_words=False):
