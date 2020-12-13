@@ -1,4 +1,10 @@
 import numpy as np
+from nltk.tokenize import RegexpTokenizer
+from nltk.corpus import stopwords
+import nltk
+from nltk.corpus import wordnet
+from nltk.stem import WordNetLemmatizer
+from collections import Counter
 
 def file_to_n_files(filename,n):
     '''Reads .txt file, splits it into n equal parts, saves to the same filepath, but with additional symbols in name, returns nothing.
@@ -28,13 +34,96 @@ def txt_to_array(filename):
     return x
 
 
+def preprocess(document, lemmatization=False, rm_stop_words=False):
+    """
+    - convert the whole text to the lowercase;
+    - tokenize the text;
+    - remove stopwords;
+    - lemmatize the text.
+    Return: string, resulted list of tokens joined with the space.
+    """
+
+    # If we want to delete stopwords and perform lemmatization
+    # nltk.download('wordnet')
+    # nltk.download('stopwords')
+    # wordnet_lemmatizer = WordNetLemmatizer()
+    # stop_words = set(stopwords.words('english))
+    tokenizer = RegexpTokenizer(r'[a-z]+')
+
+    # Convert to lowercase
+    document = document.lower()
+    # Tokenize
+    words = tokenizer.tokenize(document)
+
+    # Removing stopwords
+    if rm_stop_words:
+        #nltk.download('stopwords')
+        stop_words = set(stopwords.words('english'))
+        words = [w for w in words if w not in stop_words]
+    # Lemmatizing
+    if lemmatization:
+        #nltk.download('wordnet')
+        wordnet_lemmatizer = WordNetLemmatizer()
+        for pos in [wordnet.NOUN, wordnet.VERB, wordnet.ADJ, wordnet.ADV]:
+            words = [wordnet_lemmatizer.lemmatize(x, pos) for x in words]
+
+    return words
+
 
 def array_to_counts(array, n_use, n_keep):
     '''Given the array of str (output of function txt_to_array) first  it counts all the words but in the process it keeps only top n_uses words.
     Then it returns only top n_keep words with their count in the form of 2 arrays, one with strs and another one with ints, ints should be sorted in descending
     order'''
-    pass
-    #return words, counts
+    tmp_voc = {}
+    tmp_array = array.copy()
+    # preprocess strings, have the array of sorted dicts of token frequencies
+    tmp_array = [dict(sorted(dict(Counter(preprocess(tmp, lemmatization=True, rm_stop_words=True))).items(), key=lambda item: item[1], reverse=True)) for tmp in tmp_array]
+    # count how many most frequent word we should take from each str to dill the array of size `n_use`
+    words_from_str = n_use // len(tmp_array) + 1 if n_use > len(tmp_array) else n_use
+    second_run = 0
+    for k, tokens in enumerate(tmp_array):
+        i = 0
+        keys_to_pop = []
+        keys = list(tokens.keys())
+        values = list(tokens.values())
+        if len(tmp_voc) < n_use + 1:
+            # here we add only `m` words from the str to count only most frequent words
+            m = min(words_from_str, len(tokens))
+            while i < m:
+                try:
+                    tmp_voc[keys[i]] += values[i]
+                    keys_to_pop.append(i)
+                    i += 1
+                    m = min(len(tokens), m + 1)
+                except KeyError:
+                    if len(tmp_voc) < n_use + 1:
+                        tmp_voc[keys[i]] = values[i]
+                        keys_to_pop.append(i)
+                        i += 1
+                    else:
+                        break
+        else:
+            # when we go out of size, just count words from `tmp_voc'
+            second_run = k if second_run == 0 else second_run
+            for key, value in zip(keys, values):
+                try:
+                    tmp_voc[key] += value
+                except KeyError:
+                    continue
+        for idx in keys_to_pop:
+            tmp_array[k].pop(keys[idx])
+    # also, we need to count words we could miss in the first run
+    for k in range(second_run):
+        keys = list(tmp_array[k].keys())
+        values = list(tmp_array[k].values())
+        for key, value in zip(keys, values):
+            try:
+                tmp_voc[key] += value
+            except KeyError:
+                continue
+    tmp_voc = dict(sorted(tmp_voc.items(), key=lambda item: item[1], reverse=True))
+    return list(tmp_voc.keys())[:n_keep], list(tmp_voc.values())[:n_keep]
+
 
 def counts_to_top(words_array, counts_array, n):
     '''Given a lists of words and counts (outputs of array_to_counts for several processes) returns the final top n in the format of 2 arrays,
@@ -49,6 +138,7 @@ def counts_to_top(words_array, counts_array, n):
     dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse = True))
     (keys,values) = zip(*dic.items())    
     return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
+
 
 def accuracy(words_real, counts_real, words_predicted, counts_predicted):
     '''Some metric to estimate the quality of prediction (should be 1 when same argument given for real and predicted
@@ -68,6 +158,7 @@ def accuracy(words_real, counts_real, words_predicted, counts_predicted):
 
     return hit_rate, score
 
+
 def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_result = 'result/',result_suff = '_0'):
     array = txt_to_array(filename)
     words, counts = array_to_counts(array, n_use, n_keep)
@@ -77,3 +168,5 @@ def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_res
         words, counts = counts_to_top(words_array,counts_array,n_final_top)
         np.array(words).dump(folder_to_save_result + 'words' + result_suff + '.txt')
         np.array(counts).dump(folder_to_save_result + 'counts' + result_suff + '.txt')
+
+
