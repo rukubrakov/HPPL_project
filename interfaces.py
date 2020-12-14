@@ -5,6 +5,8 @@ import nltk
 from nltk.corpus import wordnet
 from nltk.stem import WordNetLemmatizer
 from collections import Counter
+from numba import njit
+import numba
 
 def file_to_n_files(filename,n):
     '''Reads .txt file, splits it into n equal parts, saves to the same filepath, but with additional symbols in name, returns nothing.
@@ -16,7 +18,7 @@ def file_to_n_files(filename,n):
     if int(number_of_words_in_the_last_output[0]) == 0:
         get_ipython().system('rm $(ls $"$(cut -d\'.\' -f1 <<< $filename)_"* | sort | tail -n 1)    ')
 
-def put_str_together(array, n = 200):
+def put_str_together(array, n = 10):
     if len(array) < n * 2:
         return array
     else:
@@ -41,7 +43,7 @@ def txt_to_array(filename):
                 if temp_list: #check if temp_list contains any items
                     x += temp_list
                 temp_list = []
-    return put_str_together(x)
+    return x
 
 
 def preprocess(document, lemmatization=False, rm_stop_words=False):
@@ -78,6 +80,19 @@ def preprocess(document, lemmatization=False, rm_stop_words=False):
             words = [wordnet_lemmatizer.lemmatize(x, pos) for x in words]
 
     return words
+def array_to_counts2(array, n_use, n_keep):
+    dic = {}
+    for i,str in enumerate(array):
+        str = preprocess(str, lemmatization=True, rm_stop_words=True)
+        for word in str:
+            if word in dic:
+                dic[word]+=1
+            else:
+                dic[word] = 1
+        if (i+1) % 5 == 0:
+            dic = {k: v for k, v in sorted(dic.items(), key=lambda item: item[1])[-n_use:]}
+    dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse=True))
+    return list(dic.keys())[:n_keep], list(dic.values())[:n_keep]
 
 
 def array_to_counts(array, n_use, n_keep):
@@ -100,12 +115,12 @@ def array_to_counts(array, n_use, n_keep):
             # here we add only `m` words from the str to count only most frequent words
             m = min(words_from_str, len(tokens))
             while i < m:
-                try:
+                if keys[i] in tmp_voc:
                     tmp_voc[keys[i]] += values[i]
                     keys_to_pop.append(i)
                     i += 1
                     m = min(len(tokens), m + 1)
-                except KeyError:
+                else:
                     if len(tmp_voc) < n_use + 1:
                         tmp_voc[keys[i]] = values[i]
                         keys_to_pop.append(i)
@@ -116,9 +131,9 @@ def array_to_counts(array, n_use, n_keep):
             # when we go out of size, just count words from `tmp_voc'
             second_run = k if second_run == 0 else second_run
             for key, value in zip(keys, values):
-                try:
+                if key in tmp_voc:
                     tmp_voc[key] += value
-                except KeyError:
+                else:
                     continue
         for idx in keys_to_pop:
             tmp_array[k].pop(keys[idx])
@@ -127,9 +142,9 @@ def array_to_counts(array, n_use, n_keep):
         keys = list(tmp_array[k].keys())
         values = list(tmp_array[k].values())
         for key, value in zip(keys, values):
-            try:
+            if key in tmp_voc:
                 tmp_voc[key] += value
-            except KeyError:
+            else:
                 continue
     tmp_voc = dict(sorted(tmp_voc.items(), key=lambda item: item[1], reverse=True))
     return list(tmp_voc.keys())[:n_keep], list(tmp_voc.values())[:n_keep]
@@ -149,6 +164,17 @@ def counts_to_top(words_array, counts_array, n):
     (keys,values) = zip(*dic.items())    
     return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
 
+def counts_to_top2(words_array, counts_array, n):
+    dic = {}
+    for word_array,count_array in zip(words_array,counts_array):
+        for word,count in zip(word_array,count_array):
+            if word in dic:
+                dic[word] += count
+            else:
+                dic[word] = count
+    dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse = True))
+    (keys,values) = zip(*dic.items())    
+    return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
 
 def accuracy(words_real, counts_real, words_predicted, counts_predicted):
     '''Some metric to estimate the quality of prediction (should be 1 when same argument given for real and predicted
@@ -171,12 +197,10 @@ def accuracy(words_real, counts_real, words_predicted, counts_predicted):
 
 def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_result = 'result/',result_suff = '_0'):
     array = txt_to_array(filename)
-    words, counts = array_to_counts(array, n_use, n_keep)
+    words, counts = array_to_counts2(array, n_use, n_keep)
     words_array = comm.gather(words, root=0)
     counts_array = comm.gather(counts, root=0)
     if rank == 0:
-        words, counts = counts_to_top(words_array,counts_array,n_final_top)
+        words, counts = counts_to_top2(words_array,counts_array,n_final_top)
         np.array(words).dump(folder_to_save_result + 'words' + result_suff + '.txt')
         np.array(counts).dump(folder_to_save_result + 'counts' + result_suff + '.txt')
-
-
