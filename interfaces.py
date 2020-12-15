@@ -94,7 +94,31 @@ def array_to_counts2(array, n_use, n_keep):
     dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse=True))
     return list(dic.keys())[:n_keep], list(dic.values())[:n_keep]
 
-
+def array_to_counts3(array, n_use, n_keep):
+    tmp = []
+    for i,str in enumerate(array):
+        str = preprocess(str, lemmatization=True, rm_stop_words=True)
+        tmp+=str
+        if (i+1) % 5 == 0:
+            if len(tmp)!=0:
+                dic = words_to_dict(tmp)
+                dic = {k: v for k, v in sorted(dic.items(), key=lambda item: item[1])[-n_use:]}  
+                tmp = []
+    dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse=True))
+    return list(dic.keys())[:n_keep], list(dic.values())[:n_keep]
+@njit
+def words_to_dict(array):
+    is_first = True
+    for word in array:
+        if is_first:
+            dic = {word:1}
+            is_first = False
+            continue
+        if word in dic:
+            dic[word]+=1
+        else:
+            dic[word] = 1
+    return dic
 def array_to_counts(array, n_use, n_keep):
     '''Given the array of str (output of function txt_to_array) first  it counts all the words but in the process it keeps only top n_uses words.
     Then it returns only top n_keep words with their count in the form of 2 arrays, one with strs and another one with ints, ints should be sorted in descending
@@ -176,6 +200,30 @@ def counts_to_top2(words_array, counts_array, n):
     (keys,values) = zip(*dic.items())    
     return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
 
+def counts_to_top3(words_array, counts_array, n):
+    word_array = []
+    count_array = []
+    for el in words_array:
+        word_array += el
+    for el in counts_array:
+        count_array += el
+    dic = total_counter(word_array,count_array)
+    dic = dict(sorted(dic.items(), key=lambda item: item[1], reverse = True))
+    (keys,values) = zip(*dic.items())    
+    return list(keys[:min(n, len(keys))]), list(values[:min(n, len(keys))])
+@njit
+def total_counter(word_array,count_array):
+    is_first = True
+    for word,count in zip(word_array,count_array):
+        if is_first:
+            dic = {word:count}
+            is_first =False
+            continue
+        if word in dic:
+            dic[word] += count
+        else:
+            dic[word] = count
+    return dic
 def accuracy(words_real, counts_real, words_predicted, counts_predicted):
     '''Some metric to estimate the quality of prediction (should be 1 when same argument given for real and predicted
     and 0 if there is no words coincide'''
@@ -202,5 +250,15 @@ def pipeline(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_res
     counts_array = comm.gather(counts, root=0)
     if rank == 0:
         words, counts = counts_to_top2(words_array,counts_array,n_final_top)
+        np.array(words).dump(folder_to_save_result + 'words' + result_suff + '.txt')
+        np.array(counts).dump(folder_to_save_result + 'counts' + result_suff + '.txt')
+        
+def pipeline2(filename, n_use, n_keep, rank, comm,n_final_top, folder_to_save_result = 'result/',result_suff = '_0'):
+    array = txt_to_array(filename)
+    words, counts = array_to_counts3(array, n_use, n_keep)
+    words_array = comm.gather(words, root=0)
+    counts_array = comm.gather(counts, root=0)
+    if rank == 0:
+        words, counts = counts_to_top3(words_array,counts_array,n_final_top)
         np.array(words).dump(folder_to_save_result + 'words' + result_suff + '.txt')
         np.array(counts).dump(folder_to_save_result + 'counts' + result_suff + '.txt')
